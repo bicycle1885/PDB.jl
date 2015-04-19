@@ -103,8 +103,38 @@ type Remark
     remarks::Dict{Int,Vector{ASCIIString}}
 end
 
+type DBReference
+    idcode::ASCIIString
+    chainID::Char
+    seqrange::UnitRange{Int}
+    ins::(Char,Char)
+    database::ASCIIString
+    dbaccession::ASCIIString
+    dbidcode::ASCIIString
+    dbseqrange::UnitRange{Int}
+    dbins::(Char,Char)
+end
+
 type PrimaryStructure
+    dbref::Nullable{DBReference}
     seqres::Dict{Char,Vector{ASCIIString}}
+end
+
+function show(io::IO, primstr::PrimaryStructure)
+    chains = sort(collect(keys(primstr.seqres)))
+    n_chains = length(chains)
+    print(io, "Primary Structure ($n_chains chains)")
+    for chain in chains
+        println(io)
+        residues = primstr.seqres[chain]
+        n_residues = length(residues)
+        if n_residues > 4
+            seq = join(vcat(residues[1:2], "...", residues[end-1:end]), "-")
+        else
+            seq = join(residues, "-")
+        end
+        print(io, " * $chain ($n_residues residues): $seq")
+    end
 end
 
 type Atom
@@ -217,7 +247,6 @@ end
 name(a::Atom) = a.name
 name(r::Residue) = r.name
 name(c::Chain) = c.chainID
-
 
 type Coordinate
     models::Vector{Model}
@@ -356,7 +385,6 @@ function parse_entry(io::IO)
     # TODO
     while s.record !== :REMARK; readline(s); end
     remark = parse_remark_section(s)
-    while s.record !== :SEQRES; readline(s); end
     primarystructure = parse_primary_structure_section(s)
     while s.record !== :ATOM && s.record !== :MODEL; readline(s); end
     coordinate = parse_coodinate_section(s)
@@ -435,6 +463,64 @@ end
 # -------------------------
 
 function parse_primary_structure_section(s)
+    if s.record === :DBREF
+        while s.record === :DBREF
+            dbref = Nullable(parse_dbref(s))
+            readline(s)
+        end
+    else
+        dbref = Nullable{DBReference}()
+    end
+    while s.record === :DBREF1 || s.record === :DBREF2
+        # TODO
+        readline(s)
+    end
+    while s.record === :SEQADV
+        parse_seqadv(s)
+        readline(s)
+    end
+    seqres = parse_seqres(s)
+    while s.record === :MODRES
+        parse_modres(s)
+        readline(s)
+    end
+    PrimaryStructure(dbref, seqres)
+end
+
+function parse_dbref(s)
+    idcode = s.line[8:11]
+    chainID = s.line[13]
+    seqbegin = int(s.line[15:18])
+    insertbegin = s.line[19]
+    seqend = int(s.line[21:24])
+    insertend = s.line[25]
+    database = strip(s.line[27:32])
+    dbaccession = strip(s.line[34:41])
+    dbidcode = strip(s.line[43:54])
+    dbseqbegin = int(s.line[56:60])
+    idbnsbeg = s.line[61]
+    dbseqend = int(s.line[63:67])
+    dbinsend = s.line[68]
+    DBReference(
+        idcode, chainID, seqbegin:seqend, (insertbegin,insertend),
+        database, dbaccession, dbidcode, dbseqbegin:dbseqend, (idbnsbeg,dbinsend)
+    )
+end
+
+function parse_seqadv(s)
+    idcode = s.line[8:11]
+    resname = strip(s.line[13:15])
+    chainID = s.line[17]
+    seqnum = int(s.line[19:22])
+    icode = s.line[23]
+    database = strip(s.line[25:28])
+    dbaccession = strip(s.line[30:38])
+    dbres = strip(s.line[40:42])
+    dbseq = int(s.line[44:48])
+    conflict = strip(s.line[50:70])
+end
+
+function parse_seqres(s)
     seqres = Dict{Char,Vector{ASCIIString}}()
     while s.record === :SEQRES
         current_chain = s.line[12]
@@ -454,7 +540,17 @@ function parse_primary_structure_section(s)
         @assert length(residues) == numres
         seqres[current_chain] = residues
     end
-    PrimaryStructure(seqres)
+    seqres
+end
+
+function parse_modres(s)
+    idcode = s.line[8:11]
+    resname = strip(s.line[13:15])
+    chainID = s.line[17]
+    seqnum = int(s.line[19:22])
+    icode = s.line[23]
+    stdres = strip(s.line[25:27])
+    comment = strip(s.line[30:70])
 end
 
 # Coordinate Section
@@ -474,7 +570,7 @@ function parse_coodinate_section(s)
         atoms = Atom[]
         chains = (Char,Vector{Atom})[]
         local atom::Atom
-        while (multimodel && s.record !== :ENDMDL) || (!multimodel && s.record !== :CONECT)
+        while (multimodel && s.record !== :ENDMDL) || (!multimodel && !(s.record === :CONECT || s.record === :MASTER))
             if s.record === :ATOM || s.record === :HETATM
                 atom = parse_atom(s)
                 s.n_atom_records += 1
@@ -514,7 +610,10 @@ function parse_coodinate_section(s)
             readline(s)
         end
         push!(models, Model(mserial, chains, atoms))
-        readline(s)
+        if multimodel
+            @assert s.record === :ENDMDL
+            readline(s)
+        end
     end
     Coordinate(models)
 end

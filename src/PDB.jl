@@ -1,5 +1,7 @@
 module PDB
 
+using Compat
+
 export parse_entry, eachatom, eachmol, eachchain
 
 import Base: convert, show, start, done, next
