@@ -137,6 +137,25 @@ function show(io::IO, primstr::PrimaryStructure)
     end
 end
 
+type Het
+    hetID::ASCIIString
+    chainID::Char
+    seqnum::Int
+    icode::Char
+    numhetatoms::Int
+    text::ASCIIString
+end
+
+type Hetnam
+    hetID::ASCIIString
+    text::ASCIIString
+end
+
+type Heterogen
+    hets::Vector{Het}
+    hetnams::Vector{Hetnam}
+end
+
 type Atom
     hetero::Bool
     serial::Int
@@ -551,6 +570,38 @@ function parse_modres(s)
     icode = s.line[23]
     stdres = strip(s.line[25:27])
     comment = strip(s.line[30:70])
+end
+
+# Heterogen Section
+# -----------------
+
+function parse_heterogen_section(s)
+    hets = Het[]
+    while s.record === :HET
+        parse_het(s)
+        readline(s)
+    end
+    while s.record === :HETNAM
+        parse_hetnam(s)
+        readline(s)
+    end
+end
+
+function parse_het(s)
+    hetID = strip(s.line[8:10])
+    chainID = s.line[13]
+    seqnum = int(s.line[14:17])
+    icode = s.line[18]
+    numhetatoms = int(s.line[21:25])
+    text = strip(s.line[31:70])
+    Het(hetID, chainID, seqnum, icode, numhetatoms, text)
+end
+
+function parse_hetnam(s)
+    # TODO: continuation
+    hetID = strip(s.line[12:14])
+    text = rstrip(s.line[16:70])
+    Hetnam(hetID, text)
 end
 
 # Coordinate Section
