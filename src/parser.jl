@@ -174,8 +174,9 @@ function show(io::IO, hetgen::Heterogen)
     print(io, "Heterogeneous Components ($(length(hetgen.hets)) molecules/residues)")
     for het in hetgen.hets
         println(io)
-        hetnam = hetgen.hetnams[findfirst(x -> x.hetID == het.hetID, hetgen.hetnams)]
-        print(io, " * $(het.hetID): $(hetnam.text)")
+        i = findfirst(x -> x.hetID == het.hetID, hetgen.hetnams)
+        hettxt = i > 0 ? hetgen.hetnams[i].text : ""
+        print(io, " * $(het.hetID) ($(het.numhetatoms) atoms): $(hettxt)")
     end
 end
 
