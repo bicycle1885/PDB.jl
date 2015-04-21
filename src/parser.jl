@@ -151,9 +151,32 @@ type Hetnam
     text::ASCIIString
 end
 
+type Hetsyn
+    hetID::ASCIIString
+    hetsyn::ASCIIString
+end
+
+type Formula
+    compnum::Int
+    hetID::ASCIIString
+    asterisk::Bool
+    text::ASCIIString
+end
+
 type Heterogen
     hets::Vector{Het}
     hetnams::Vector{Hetnam}
+    hetsyns::Vector{Hetsyn}
+    formulae::Vector{Formula}
+end
+
+function show(io::IO, hetgen::Heterogen)
+    print(io, "Heterogeneous Components ($(length(hetgen.hets)) molecules/residues)")
+    for het in hetgen.hets
+        println(io)
+        hetnam = hetgen.hetnams[findfirst(x -> x.hetID == het.hetID, hetgen.hetnams)]
+        print(io, " * $(het.hetID): $(hetnam.text)")
+    end
 end
 
 type Atom
@@ -281,6 +304,7 @@ type Entry
     title::Title
     remark::Remark
     primarystructure::PrimaryStructure
+    heterogen::Heterogen
     coordinate::Coordinate
     connectivity::Connectivity
 end
@@ -405,12 +429,13 @@ function parse_entry(io::IO)
     while s.record !== :REMARK; readline(s); end
     remark = parse_remark_section(s)
     primarystructure = parse_primary_structure_section(s)
+    heterogen = parse_heterogen_section(s)
     while s.record !== :ATOM && s.record !== :MODEL; readline(s); end
     coordinate = parse_coodinate_section(s)
     connectivity = parse_connectivity_section(s)
     parse_bookkeeping_section(s)
     @assert eof(s.io)
-    Entry(title, remark, primarystructure, coordinate, connectivity)
+    Entry(title, remark, primarystructure, heterogen, coordinate, connectivity)
 end
 
 # Title Section
@@ -578,13 +603,25 @@ end
 function parse_heterogen_section(s)
     hets = Het[]
     while s.record === :HET
-        parse_het(s)
+        push!(hets, parse_het(s))
         readline(s)
     end
+    hetnams = Hetnam[]
     while s.record === :HETNAM
-        parse_hetnam(s)
+        push!(hetnams, parse_hetnam(s))
         readline(s)
     end
+    hetsyns = Hetsyn[]
+    while s.record === :HETSYN
+        push!(hetsyns, parse_hetsyn(s))
+        readline(s)
+    end
+    formulae = Formula[]
+    while s.record === :FORMUL
+        push!(formulae, parse_formul(s))
+        readline(s)
+    end
+    Heterogen(hets, hetnams, hetsyns, formulae)
 end
 
 function parse_het(s)
@@ -602,6 +639,22 @@ function parse_hetnam(s)
     hetID = strip(s.line[12:14])
     text = rstrip(s.line[16:70])
     Hetnam(hetID, text)
+end
+
+function parse_hetsyn(s)
+    # TODO: continuation
+    hetID = strip(s.line[12:14])
+    hetsyn = rstrip(s.line[16:70])
+    Hetsyn(hetID, hetsyn)
+end
+
+function parse_formul(s)
+    compnum = int(s.line[9:10])
+    hetID = strip(s.line[13:15])
+    # TODO: continuation
+    asterisk = s.line[19] == '*'
+    text = rstrip(s.line[20:70])
+    Formula(compnum, hetID, asterisk, text)
 end
 
 # Coordinate Section
