@@ -180,6 +180,17 @@ function show(io::IO, hetgen::Heterogen)
     end
 end
 
+type Helix
+   sernum::Int
+   helixID::ASCIIString
+   initresname::ASCIIString
+   initchainID::Char
+   initseqnum::Int
+   initicode::Char
+   endresname::ASCIIString
+   endchainid::Char
+end
+
 type Atom
     hetero::Bool
     serial::Int
@@ -310,6 +321,9 @@ type Entry
     connectivity::Connectivity
 end
 
+name(entry::Entry) = entry.title.idcode
+models(entry::Entry) = entry.coordinate.models
+
 function show(io::IO, ent::Entry)
     println(io, "Protein: $(ent.title.classification) [$(ent.title.idcode)]")
     models = ent.coordinate.models
@@ -431,6 +445,7 @@ function parse_entry(io::IO)
     remark = parse_remark_section(s)
     primarystructure = parse_primary_structure_section(s)
     heterogen = parse_heterogen_section(s)
+    # TODO
     while s.record !== :ATOM && s.record !== :MODEL; readline(s); end
     coordinate = parse_coodinate_section(s)
     connectivity = parse_connectivity_section(s)
